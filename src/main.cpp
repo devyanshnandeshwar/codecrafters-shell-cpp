@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <sstream>
 
 int main()
 {
@@ -13,7 +14,13 @@ int main()
 
     std::string input;
     std::getline(std::cin, input);
-    if (input == "exit")
+
+    // parsing command and argument
+    std::istringstream iss(input);
+    std::string cmd, arg;
+    iss >> cmd >> arg;
+
+    if (cmd == "exit" && (arg.empty() || arg == "0"))
     {
       exit(0);
     }
