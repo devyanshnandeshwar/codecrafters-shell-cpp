@@ -37,6 +37,23 @@ int main()
         rest.erase(0, 1);
       std::cout << rest << std::endl;
     }
+    else if (cmd == "type")
+    {
+      std::string arg;
+      iss >> arg;
+      if (arg == "echo" || arg == "exit" || arg == "type")
+      {
+        std::cout << arg << " is a shell builtin" << std::endl;
+      }
+      else if (!arg.empty())
+      {
+        std::cout << arg << ": not found" << std::endl;
+      }
+      else
+      {
+        std::cout << "type: missing argument" << std::endl;
+      }
+    }
     else
     {
       std::cout << input << ": command not found" << std::endl;
