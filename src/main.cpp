@@ -33,8 +33,7 @@ int main()
     {
       std::string rest;
       std::getline(iss, rest);
-      if (!rest.empty() && rest[0] == ' ')
-        std::cout << rest << std::endl;
+      std::cout << rest << std::endl;
     }
     else
     {
