@@ -17,12 +17,24 @@ int main()
 
     // parsing command and argument
     std::istringstream iss(input);
-    std::string cmd, arg;
-    iss >> cmd >> arg;
+    std::string cmd;
+    iss >> cmd;
 
-    if (cmd == "exit" && (arg.empty() || arg == "0"))
+    if (cmd == "exit")
     {
-      exit(0);
+      std::string arg;
+      iss >> arg;
+      if (arg.empty() || arg == "0")
+      {
+        exit(0);
+      }
+    }
+    else if (cmd == "echo")
+    {
+      std::string rest;
+      std::getline(iss, rest);
+      if (!rest.empty() && rest[0] == ' ')
+        std::cout << rest << std::endl;
     }
     else
     {
