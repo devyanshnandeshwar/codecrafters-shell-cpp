@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <sstream>
-
+#include <sys/stat.h>
 int main()
 {
   // Flush after every std::cout / std:cerr
@@ -47,7 +47,33 @@ int main()
       }
       else if (!arg.empty())
       {
-        std::cout << arg << ": not found" << std::endl;
+        char *path_env = std::getenv("PATH");
+        if (path_env)
+        {
+          std::string path_var(path_env);
+          std::istringstream path_stream(path_var);
+          std::string dir;
+          bool found = false;
+          while (std::getline(path_stream, dir, ':'))
+          {
+            std::string full_path = dir + "/" + arg;
+            struct stat sb;
+            if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+            {
+              std::cout << arg << " is " << full_path << std::endl;
+              found = true;
+              break;
+            }
+          }
+          if (!found)
+          {
+            std::cout << arg << ": not found" << std::endl;
+          }
+          else
+          {
+            std::cout << arg << ": not found" << std::endl;
+          }
+        }
       }
       else
       {
