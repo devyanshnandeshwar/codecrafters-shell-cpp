@@ -34,10 +34,10 @@ int main()
     }
     else if (cmd == "echo")
     {
-      // Tokenize input after "echo" using the same logic as external commands
       std::vector<std::string> tokens;
-      bool in_single_quote = false;
       std::string current;
+      bool in_single_quote = false;
+      bool in_double_quote = false;
       // Start after "echo " (find position after first space)
       size_t start = input.find("echo");
       if (start != std::string::npos)
@@ -47,22 +47,56 @@ int main()
       for (size_t i = start; i < input.size(); ++i)
       {
         char c = input[i];
-        if (c == '\'')
+        if (in_single_quote)
         {
-          in_single_quote = !in_single_quote;
-          continue;
-        }
-        if (!in_single_quote && std::isspace(c))
-        {
-          if (!current.empty())
+          if (c == '\'')
           {
-            tokens.push_back(current);
-            current.clear();
+            in_single_quote = false;
+          }
+          else
+          {
+            current += c;
+          }
+        }
+        else if (in_double_quote)
+        {
+          if (c == '"')
+          {
+            in_double_quote = false;
+          }
+          else if (c == '\\' && i + 1 < input.size() &&
+                   (input[i + 1] == '"' || input[i + 1] == '\\' || input[i + 1] == '$' || input[i + 1] == '\n'))
+          {
+            current += input[i + 1];
+            ++i;
+          }
+          else
+          {
+            current += c;
           }
         }
         else
         {
-          current += c;
+          if (c == '\'')
+          {
+            in_single_quote = true;
+          }
+          else if (c == '"')
+          {
+            in_double_quote = true;
+          }
+          else if (std::isspace(c))
+          {
+            if (!current.empty())
+            {
+              tokens.push_back(current);
+              current.clear();
+            }
+          }
+          else
+          {
+            current += c;
+          }
         }
       }
       if (!current.empty())
