@@ -48,12 +48,12 @@ int main()
       else if (!arg.empty())
       {
         char *path_env = std::getenv("PATH");
+        bool found = false;
         if (path_env)
         {
           std::string path_var(path_env);
           std::istringstream path_stream(path_var);
           std::string dir;
-          bool found = false;
           while (std::getline(path_stream, dir, ':'))
           {
             std::string full_path = dir + "/" + arg;
@@ -65,14 +65,10 @@ int main()
               break;
             }
           }
-          if (!found)
-          {
-            std::cout << arg << ": not found" << std::endl;
-          }
-          else
-          {
-            std::cout << arg << ": not found" << std::endl;
-          }
+        }
+        if (!found)
+        {
+          std::cout << arg << ": not found" << std::endl;
         }
       }
       else
