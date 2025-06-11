@@ -34,11 +34,49 @@ int main()
     }
     else if (cmd == "echo")
     {
-      std::string rest;
-      std::getline(iss, rest);
-      if (!rest.empty() && rest[0] == ' ')
-        rest.erase(0, 1);
-      std::cout << rest << std::endl;
+      // Tokenize input after "echo" using the same logic as external commands
+      std::vector<std::string> tokens;
+      bool in_single_quote = false;
+      std::string current;
+      // Start after "echo " (find position after first space)
+      size_t start = input.find("echo");
+      if (start != std::string::npos)
+        start += 4;
+      while (start < input.size() && std::isspace(input[start]))
+        ++start;
+      for (size_t i = start; i < input.size(); ++i)
+      {
+        char c = input[i];
+        if (c == '\'')
+        {
+          in_single_quote = !in_single_quote;
+          continue;
+        }
+        if (!in_single_quote && std::isspace(c))
+        {
+          if (!current.empty())
+          {
+            tokens.push_back(current);
+            current.clear();
+          }
+        }
+        else
+        {
+          current += c;
+        }
+      }
+      if (!current.empty())
+      {
+        tokens.push_back(current);
+      }
+      // Print the rest joined by spaces
+      for (size_t i = 0; i < tokens.size(); ++i)
+      {
+        if (i > 0)
+          std::cout << " ";
+        std::cout << tokens[i];
+      }
+      std::cout << std::endl;
     }
     else if (cmd == "type")
     {
@@ -83,7 +121,6 @@ int main()
     {
       // Parse command and arguments into a vector
       std::vector<std::string> tokens;
-      std::string arg;
       bool in_single_quote = false;
       std::string current;
       for (size_t i = 0; i < input.size(); ++i)
