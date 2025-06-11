@@ -83,11 +83,33 @@ int main()
     {
       // Parse command and arguments into a vector
       std::vector<std::string> tokens;
-      std::istringstream iss2(input);
-      std::string token;
-      while (iss2 >> token)
+      std::string arg;
+      bool in_single_quote = false;
+      std::string current;
+      for (size_t i = 0; i < input.size(); ++i)
       {
-        tokens.push_back(token);
+        char c = input[i];
+        if (c == '\'')
+        {
+          in_single_quote = !in_single_quote;
+          continue;
+        }
+        if (!in_single_quote && std::isspace(c))
+        {
+          if (!current.empty())
+          {
+            tokens.push_back(current);
+            current.clear();
+          }
+        }
+        else
+        {
+          current += c;
+        }
+      }
+      if (!current.empty())
+      {
+        tokens.push_back(current);
       }
       if (tokens.empty())
         continue;
