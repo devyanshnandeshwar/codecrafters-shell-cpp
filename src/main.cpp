@@ -615,8 +615,28 @@ int main()
       }
       else if (cmd == "history")
       {
+        std::string arg1, arg2;
+        iss >> arg1 >> arg2;
+        if (arg1 == "-r" && !arg2.empty())
+        {
+          // Read history from file and append to current history
+          read_history(arg2.c_str());
+          // Do not print anything, just return
+          continue;
+        }
+
         int n = -1;
-        iss >> n; // Try to read an integer argument
+        if (!arg1.empty() && arg1 != "-r")
+        {
+          try
+          {
+            n = std::stoi(arg1);
+          }
+          catch (...)
+          {
+            n = -1;
+          }
+        }
         HIST_ENTRY **hist_list = history_list();
         if (hist_list)
         {
