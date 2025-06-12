@@ -690,6 +690,14 @@ int main()
           }
         }
       }
+      else if (cmd == "pwd")
+      {
+        char cwd[4096];
+        if (getcwd(cwd, sizeof(cwd)))
+          std::cout << cwd << std::endl;
+        else
+          std::cerr << "pwd: error retrieving current directory" << std::endl;
+      }
       else
       {
         // Parse command and arguments into a vector
