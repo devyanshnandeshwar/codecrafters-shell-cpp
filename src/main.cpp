@@ -707,6 +707,16 @@ int main()
           // Do nothing or optionally set to HOME in later stages
           continue;
         }
+        // Handle ~ as home directory
+        if (path == "~")
+        {
+          const char *home = std::getenv("HOME");
+          if (home && chdir(home) != 0)
+          {
+            std::cerr << "cd: " << path << ": No such file or directory" << std::endl;
+          }
+          continue;
+        }
         if (chdir(path.c_str()) != 0)
         {
           std::cerr << "cd: " << path << ": No such file or directory" << std::endl;
