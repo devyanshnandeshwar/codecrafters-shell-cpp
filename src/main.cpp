@@ -154,6 +154,13 @@ int main()
 
   int last_appended_history = 0;
 
+  // --- Load history from HISTFILE on startup ---
+  const char *histfile = std::getenv("HISTFILE");
+  if (histfile && histfile[0] != '\0')
+  {
+    read_history(histfile);
+  }
+
   while (true)
   {
     char *input_c = readline("$ ");
@@ -869,6 +876,12 @@ int main()
         }
       }
     }
+  }
+
+  // --- Save history to HISTFILE on exit ---
+  if (histfile && histfile[0] != '\0')
+  {
+    write_history(histfile);
   }
   return 0;
 }
