@@ -26,7 +26,7 @@ char *builtin_generator(const char *text, int state)
       // Allocate a new string for readline to use
       char *completion = (char *)malloc(strlen(name) + 2);
       strcpy(completion, name);
-      strcat(completion, " "); // Add a space after completion
+      // strcat(completion, ""); // Add a space after completion
       return completion;
     }
   }
