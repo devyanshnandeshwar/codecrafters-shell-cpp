@@ -249,6 +249,31 @@ int main()
         }
       }
 
+      // After handling > and 1> redirection, add:
+      std::string redirect_stderr_file;
+      for (size_t i = 0; i < tokens.size(); ++i)
+      {
+        if (tokens[i] == "2>" && i + 1 < tokens.size())
+        {
+          redirect_stderr_file = tokens[i + 1];
+          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+          break;
+        }
+      }
+
+      int saved_stderr = -1;
+      if (!redirect_stderr_file.empty())
+      {
+        int fd_err = open(redirect_stderr_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd_err < 0)
+        {
+          std::cerr << "Failed to open file for stderr redirection: " << redirect_stderr_file << std::endl;
+          exit(1);
+        }
+        dup2(fd_err, 2);
+        close(fd_err);
+      }
+
       // Search PATH for executable
       char *path_env = std::getenv("PATH");
       std::string exec_path;
