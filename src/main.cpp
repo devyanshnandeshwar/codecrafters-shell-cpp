@@ -13,7 +13,7 @@
 
 char *builtin_generator(const char *text, int state)
 {
-  static const char *builtins[] = {"echo", "exit", "history", nullptr};
+  static const char *builtins[] = {"echo", "exit", "history", "pwd", nullptr};
   static int list_index, len;
   if (!state)
   {
@@ -312,7 +312,7 @@ int main()
           {
             if (tokens.size() < 2)
               std::cout << "type: missing argument" << std::endl;
-            else if (tokens[1] == "echo" || tokens[1] == "exit" || tokens[1] == "type" || tokens[1] == "history")
+            else if (tokens[1] == "echo" || tokens[1] == "exit" || tokens[1] == "type" || tokens[1] == "history" || tokens[1] == "pwd")
               std::cout << tokens[1] << " is a shell builtin" << std::endl;
             else
             {
@@ -590,7 +590,7 @@ int main()
       {
         std::string arg;
         iss >> arg;
-        if (arg == "echo" || arg == "exit" || arg == "type" || arg == "history")
+        if (arg == "echo" || arg == "exit" || arg == "type" || arg == "history" || arg == "pwd")
         {
           std::cout << arg << " is a shell builtin" << std::endl;
         }
