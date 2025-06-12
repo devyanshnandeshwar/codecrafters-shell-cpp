@@ -217,8 +217,8 @@ int main()
             std::cout << " ";
           std::cout << tokens[i];
         }
+        std::cout << std::endl;
       }
-      std::cout << std::endl;
 
       if (fd != -1)
       {
