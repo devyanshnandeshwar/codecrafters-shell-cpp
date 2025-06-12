@@ -97,13 +97,20 @@ int main()
 
       // Handle output redirection for echo
       std::string redirect_file;
+      std::string redirect_stderr_file;
       for (size_t i = 0; i < tokens.size(); ++i)
       {
         if ((tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.size())
         {
           redirect_file = tokens[i + 1];
           tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
-          break;
+          i -= 1;
+        }
+        else if (tokens[i] == "2>" && i + 1 < tokens.size())
+        {
+          redirect_stderr_file = tokens[i + 1];
+          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+          i -= 1;
         }
       }
 
@@ -121,6 +128,27 @@ int main()
         dup2(fd, 1);
       }
 
+      int saved_stderr = -1;
+      int fd_err = -1;
+      if (!redirect_stderr_file.empty())
+      {
+        fd_err = open(redirect_stderr_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd_err < 0)
+        {
+          std::cerr << "Failed to open file for stderr redirection: " << redirect_stderr_file << std::endl;
+          if (fd != -1)
+          {
+            fflush(stdout);
+            dup2(saved_stdout, 1);
+            close(fd);
+            close(saved_stdout);
+          }
+          return 1;
+        }
+        saved_stderr = dup(2);
+        dup2(fd_err, 2);
+      }
+
       // Print the rest joined by spaces
       for (size_t i = 0; i < tokens.size(); ++i)
       {
@@ -136,6 +164,13 @@ int main()
         dup2(saved_stdout, 1);
         close(fd);
         close(saved_stdout);
+      }
+      if (fd_err != -1)
+      {
+        fflush(stderr);
+        dup2(saved_stderr, 2);
+        close(fd_err);
+        close(saved_stderr);
       }
     }
     else if (cmd == "type")
