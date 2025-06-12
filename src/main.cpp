@@ -96,13 +96,21 @@ int main()
         tokens.push_back(current);
 
       // Handle output redirection for echo
-      std::string redirect_file;
-      std::string redirect_stderr_file;
+      std::string redirect_file, redirect_stderr_file, append_file;
+      bool append_mode = false;
       for (size_t i = 0; i < tokens.size(); ++i)
       {
         if ((tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.size())
         {
           redirect_file = tokens[i + 1];
+          append_mode = false;
+          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+          i -= 1;
+        }
+        else if ((tokens[i] == ">>" || tokens[i] == "1>>") && i + 1 < tokens.size())
+        {
+          redirect_file = tokens[i + 1];
+          append_mode = true;
           tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
           i -= 1;
         }
@@ -118,7 +126,8 @@ int main()
       int fd = -1;
       if (!redirect_file.empty())
       {
-        fd = open(redirect_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        int flags = O_WRONLY | O_CREAT | (append_mode ? O_APPEND : O_TRUNC);
+        fd = open(redirect_file.c_str(), flags, 0644);
         if (fd < 0)
         {
           std::cerr << "Failed to open file for redirection: " << redirect_file << std::endl;
@@ -273,12 +282,21 @@ int main()
       // Handle output redirection
       int redirect_fd = -1;
       std::string redirect_file;
+      bool append_mode = false;
       for (size_t i = 0; i < tokens.size(); ++i)
       {
         if ((tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.size())
         {
           redirect_file = tokens[i + 1];
+          append_mode = false;
           // Remove the redirection operator and filename from tokens
+          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+          break;
+        }
+        else if ((tokens[i] == ">>" || tokens[i] == "1>>") && i + 1 < tokens.size())
+        {
+          redirect_file = tokens[i + 1];
+          append_mode = true;
           tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
           break;
         }
@@ -345,7 +363,8 @@ int main()
 
         if (!redirect_file.empty())
         {
-          int fd = open(redirect_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          int flags = O_WRONLY | O_CREAT | (append_mode ? O_APPEND : O_TRUNC);
+          int fd = open(redirect_file.c_str(), flags, 0644);
           if (fd < 0)
           {
             std::cerr << "Failed to open file for redirection: " << redirect_file << std::endl;
