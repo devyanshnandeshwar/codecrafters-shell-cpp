@@ -13,7 +13,7 @@
 
 char *builtin_generator(const char *text, int state)
 {
-  static const char *builtins[] = {"echo", "exit", nullptr};
+  static const char *builtins[] = {"echo", "exit", "history", nullptr};
   static int list_index, len;
   if (!state)
   {
@@ -302,7 +302,7 @@ int main()
           {
             if (tokens.size() < 2)
               std::cout << "type: missing argument" << std::endl;
-            else if (tokens[1] == "echo" || tokens[1] == "exit" || tokens[1] == "type")
+            else if (tokens[1] == "echo" || tokens[1] == "exit" || tokens[1] == "type" || tokens[1] == "history")
               std::cout << tokens[1] << " is a shell builtin" << std::endl;
             else
             {
@@ -578,7 +578,7 @@ int main()
       {
         std::string arg;
         iss >> arg;
-        if (arg == "echo" || arg == "exit" || arg == "type")
+        if (arg == "echo" || arg == "exit" || arg == "type" || arg == "history")
         {
           std::cout << arg << " is a shell builtin" << std::endl;
         }
@@ -611,6 +611,17 @@ int main()
         else
         {
           std::cout << "type: missing argument" << std::endl;
+        }
+      }
+      else if (cmd == "history")
+      {
+        HIST_ENTRY **hist_list = history_list();
+        if (hist_list)
+        {
+          for (int i = 0; hist_list[i]; ++i)
+          {
+            std::cout << "    " << (i + 1) << "  " << hist_list[i]->line << std::endl;
+          }
         }
       }
       else
