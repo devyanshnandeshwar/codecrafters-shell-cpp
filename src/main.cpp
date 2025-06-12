@@ -39,7 +39,14 @@ char **builtin_completion(const char *text, int start, int end)
   if (start != 0)
     return nullptr;
   rl_attempted_completion_over = 1;
-  return rl_completion_matches(text, builtin_generator);
+  char **matches = rl_completion_matches(text, builtin_generator);
+  if (!matches || !matches[0])
+  {
+    // No matches, ring bell
+    std::cout << "\a" << std::flush;
+    return nullptr;
+  }
+  return matches;
 }
 
 int main()
@@ -276,7 +283,7 @@ int main()
       }
     }
     else
-    {
+    { // strcat(co
       // Parse command and arguments into a vector
       std::vector<std::string> tokens;
       std::string current;
