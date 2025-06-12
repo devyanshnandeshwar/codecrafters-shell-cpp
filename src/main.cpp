@@ -57,10 +57,11 @@ int main()
       break; // EOF or error
 
     std::string input(input_c);
-    free(input_c); // Free the memory allocated by readline
 
     // Add the command to history
     add_history(input_c);
+
+    free(input_c); // Free the memory allocated by readline
 
     // parsing command and argument
     std::istringstream iss(input);
