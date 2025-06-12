@@ -208,17 +208,14 @@ int main()
         dup2(fd_err, 2);
       }
 
-      // Print the rest joined by spaces
-      if (!tokens.empty())
+      // Print the rest joined by spaces (no extra space if no args)
+      for (size_t i = 0; i < tokens.size(); ++i)
       {
-        for (size_t i = 0; i < tokens.size(); ++i)
-        {
-          if (i > 0)
-            std::cout << " ";
-          std::cout << tokens[i];
-        }
-        std::cout << std::endl;
+        if (i > 0)
+          std::cout << " ";
+        std::cout << tokens[i];
       }
+      std::cout << std::endl;
 
       if (fd != -1)
       {
