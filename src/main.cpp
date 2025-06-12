@@ -469,13 +469,61 @@ int main()
           return 1;
         }
 
+        // --- LEFT SIDE ---
         pid_t pid1 = fork();
         if (pid1 == 0)
         {
-          // Left child: stdout -> pipe write
-          dup2(pipefd[1], 1);
+          // Child: left side of pipeline
+          dup2(pipefd[1], 1); // stdout -> pipe write
           close(pipefd[0]);
           close(pipefd[1]);
+
+          // Built-in: echo or type
+          if (left_tokens[0] == "echo")
+          {
+            // Print arguments joined by space, then newline
+            for (size_t i = 1; i < left_tokens.size(); ++i)
+            {
+              if (i > 1)
+                std::cout << " ";
+              std::cout << left_tokens[i];
+            }
+            std::cout << std::endl;
+            exit(0);
+          }
+          else if (left_tokens[0] == "type")
+          {
+            if (left_tokens.size() < 2)
+              std::cout << "type: missing argument" << std::endl;
+            else if (left_tokens[1] == "echo" || left_tokens[1] == "exit" || left_tokens[1] == "type")
+              std::cout << left_tokens[1] << " is a shell builtin" << std::endl;
+            else
+            {
+              char *path_env = std::getenv("PATH");
+              bool found = false;
+              if (path_env)
+              {
+                std::string path_var(path_env);
+                std::istringstream path_stream(path_var);
+                std::string dir;
+                while (std::getline(path_stream, dir, ':'))
+                {
+                  std::string full_path = dir + "/" + left_tokens[1];
+                  struct stat sb;
+                  if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+                  {
+                    std::cout << left_tokens[1] << " is " << full_path << std::endl;
+                    found = true;
+                    break;
+                  }
+                }
+              }
+              if (!found)
+                std::cout << left_tokens[1] << ": not found" << std::endl;
+            }
+            exit(0);
+          }
+          // External command
           std::vector<char *> argv;
           for (auto &t : left_tokens)
             argv.push_back(const_cast<char *>(t.c_str()));
@@ -517,13 +565,60 @@ int main()
           exit(1);
         }
 
+        // --- RIGHT SIDE ---
         pid_t pid2 = fork();
         if (pid2 == 0)
         {
-          // Right child: stdin <- pipe read
-          dup2(pipefd[0], 0);
+          // Child: right side of pipeline
+          dup2(pipefd[0], 0); // stdin <- pipe read
           close(pipefd[1]);
           close(pipefd[0]);
+
+          // Built-in: echo or type
+          if (right_tokens[0] == "echo")
+          {
+            for (size_t i = 1; i < right_tokens.size(); ++i)
+            {
+              if (i > 1)
+                std::cout << " ";
+              std::cout << right_tokens[i];
+            }
+            std::cout << std::endl;
+            exit(0);
+          }
+          else if (right_tokens[0] == "type")
+          {
+            if (right_tokens.size() < 2)
+              std::cout << "type: missing argument" << std::endl;
+            else if (right_tokens[1] == "echo" || right_tokens[1] == "exit" || right_tokens[1] == "type")
+              std::cout << right_tokens[1] << " is a shell builtin" << std::endl;
+            else
+            {
+              char *path_env = std::getenv("PATH");
+              bool found = false;
+              if (path_env)
+              {
+                std::string path_var(path_env);
+                std::istringstream path_stream(path_var);
+                std::string dir;
+                while (std::getline(path_stream, dir, ':'))
+                {
+                  std::string full_path = dir + "/" + right_tokens[1];
+                  struct stat sb;
+                  if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+                  {
+                    std::cout << right_tokens[1] << " is " << full_path << std::endl;
+                    found = true;
+                    break;
+                  }
+                }
+              }
+              if (!found)
+                std::cout << right_tokens[1] << ": not found" << std::endl;
+            }
+            exit(0);
+          }
+          // External command
           std::vector<char *> argv;
           for (auto &t : right_tokens)
             argv.push_back(const_cast<char *>(t.c_str()));
