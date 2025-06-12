@@ -261,56 +261,53 @@ int main()
         }
       }
 
-      int saved_stderr = -1;
-      if (!redirect_stderr_file.empty())
-      {
-        int fd_err = open(redirect_stderr_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd_err < 0)
-        {
-          std::cerr << "Failed to open file for stderr redirection: " << redirect_stderr_file << std::endl;
-          exit(1);
-        }
-        dup2(fd_err, 2);
-        close(fd_err);
-      }
-
-      // Search PATH for executable
-      char *path_env = std::getenv("PATH");
-      std::string exec_path;
-      bool found = false;
-      if (path_env)
-      {
-        std::string path_var(path_env);
-        std::istringstream path_stream(path_var);
-        std::string dir;
-        while (std::getline(path_stream, dir, ':'))
-        {
-          std::string full_path = dir + "/" + tokens[0];
-          struct stat sb;
-          if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
-          {
-            exec_path = full_path;
-            found = true;
-            break;
-          }
-        }
-      }
-      if (!found)
-      {
-        std::cout << input << ": command not found" << std::endl;
-        continue;
-      }
-
-      // Prepare arguments for execv
-      std::vector<char *> argv;
-      for (auto &str : tokens)
-        argv.push_back(&str[0]);
-      argv.push_back(nullptr);
-
       pid_t pid = fork();
       if (pid == 0)
       {
         // Child process
+
+        // Build argv
+        std::vector<char *> argv;
+        for (size_t i = 0; i < tokens.size(); ++i)
+        {
+          argv.push_back(const_cast<char *>(tokens[i].c_str()));
+        }
+        argv.push_back(nullptr);
+
+        // Find exec_path
+        std::string exec_path;
+        if (tokens[0].find('/') == std::string::npos)
+        {
+          char *path_env = std::getenv("PATH");
+          bool found = false;
+          if (path_env)
+          {
+            std::string path_var(path_env);
+            std::istringstream path_stream(path_var);
+            std::string dir;
+            while (std::getline(path_stream, dir, ':'))
+            {
+              std::string full_path = dir + "/" + tokens[0];
+              struct stat sb;
+              if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+              {
+                exec_path = full_path;
+                found = true;
+                break;
+              }
+            }
+          }
+          if (!found)
+          {
+            std::cerr << tokens[0] << ": command not found" << std::endl;
+            exit(1);
+          }
+        }
+        else
+        {
+          exec_path = tokens[0];
+        }
+
         if (!redirect_file.empty())
         {
           int fd = open(redirect_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -321,6 +318,17 @@ int main()
           }
           dup2(fd, 1); // Redirect stdout to file
           close(fd);
+        }
+        if (!redirect_stderr_file.empty())
+        {
+          int fd_err = open(redirect_stderr_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          if (fd_err < 0)
+          {
+            std::cerr << "Failed to open file for stderr redirection: " << redirect_stderr_file << std::endl;
+            exit(1);
+          }
+          dup2(fd_err, 2); // Redirect stderr to file
+          close(fd_err);
         }
         execv(exec_path.c_str(), argv.data());
         // If execv fails
