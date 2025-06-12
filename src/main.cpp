@@ -168,7 +168,8 @@ int main()
       break;
 
     std::string input(input_c);
-    add_history(input_c);
+    if (input.find_first_not_of(" \t\n") != std::string::npos)
+      add_history(input_c);
     free(input_c);
 
     // --- PIPELINE HANDLING: must come before parsing cmd ---
@@ -421,6 +422,8 @@ int main()
         iss >> arg;
         if (arg.empty() || arg == "0")
         {
+          if (histfile && histfile[0] != '\0')
+            write_history(histfile);
           exit(0);
         }
       }
