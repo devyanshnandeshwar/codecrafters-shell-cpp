@@ -1,9 +1,11 @@
+#include <fcntl.h>
 #include <iostream>
-#include <string>
 #include <sstream>
+#include <string>
 #include <sys/stat.h>
-#include <vector>
 #include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
 
 int main()
 {
@@ -170,20 +172,14 @@ int main()
         if (in_single_quote)
         {
           if (c == '\'')
-          {
             in_single_quote = false;
-          }
           else
-          {
             current += c;
-          }
         }
         else if (in_double_quote)
         {
           if (c == '"')
-          {
             in_double_quote = false;
-          }
           else if (c == '\\' && i + 1 < input.size() &&
                    (input[i + 1] == '"' || input[i + 1] == '\\' || input[i + 1] == '$' || input[i + 1] == '\n'))
           {
@@ -191,23 +187,16 @@ int main()
             ++i;
           }
           else
-          {
             current += c;
-          }
         }
         else
         {
           if (c == '\'')
-          {
             in_single_quote = true;
-          }
           else if (c == '"')
-          {
             in_double_quote = true;
-          }
           else if (c == '\\' && i + 1 < input.size())
           {
-            // Non-quoted backslash escapes the next character
             current += input[i + 1];
             ++i;
           }
@@ -220,17 +209,27 @@ int main()
             }
           }
           else
-          {
             current += c;
-          }
         }
       }
       if (!current.empty())
-      {
         tokens.push_back(current);
-      }
       if (tokens.empty())
         continue;
+
+      // Handle output redirection
+      int redirect_fd = -1;
+      std::string redirect_file;
+      for (size_t i = 0; i < tokens.size(); ++i)
+      {
+        if ((tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.size())
+        {
+          redirect_file = tokens[i + 1];
+          // Remove the redirection operator and filename from tokens
+          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+          break;
+        }
+      }
 
       // Search PATH for executable
       char *path_env = std::getenv("PATH");
@@ -269,6 +268,17 @@ int main()
       if (pid == 0)
       {
         // Child process
+        if (!redirect_file.empty())
+        {
+          int fd = open(redirect_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          if (fd < 0)
+          {
+            std::cerr << "Failed to open file for redirection: " << redirect_file << std::endl;
+            exit(1);
+          }
+          dup2(fd, 1); // Redirect stdout to file
+          close(fd);
+        }
         execv(exec_path.c_str(), argv.data());
         // If execv fails
         std::cerr << "Failed to execute " << exec_path << std::endl;
