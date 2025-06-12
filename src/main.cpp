@@ -378,194 +378,390 @@ int main()
       }
     }
     else
-    { // strcat(co
-      // Parse command and arguments into a vector
-      std::vector<std::string> tokens;
-      std::string current;
-      bool in_single_quote = false;
-      bool in_double_quote = false;
-      for (size_t i = 0; i < input.size(); ++i)
+    {
+      // Detect pipeline
+      size_t pipe_pos = input.find('|');
+      if (pipe_pos != std::string::npos)
       {
-        char c = input[i];
-        if (in_single_quote)
+        // Split input into left and right of '|'
+        std::string left_cmd = input.substr(0, pipe_pos);
+        std::string right_cmd = input.substr(pipe_pos + 1);
+
+        // Trim whitespace
+        auto trim = [](std::string &s)
         {
-          if (c == '\'')
-            in_single_quote = false;
-          else
-            current += c;
-        }
-        else if (in_double_quote)
-        {
-          if (c == '"')
-            in_double_quote = false;
-          else if (c == '\\' && i + 1 < input.size() &&
-                   (input[i + 1] == '"' || input[i + 1] == '\\' || input[i + 1] == '$' || input[i + 1] == '\n'))
+          size_t start = s.find_first_not_of(" \t");
+          size_t end = s.find_last_not_of(" \t");
+          if (start == std::string::npos)
           {
-            current += input[i + 1];
-            ++i;
+            s = "";
+            return;
           }
-          else
-            current += c;
-        }
-        else
+          s = s.substr(start, end - start + 1);
+        };
+        trim(left_cmd);
+        trim(right_cmd);
+
+        // Tokenize
+        auto tokenize = [](const std::string &s)
         {
-          if (c == '\'')
-            in_single_quote = true;
-          else if (c == '"')
-            in_double_quote = true;
-          else if (c == '\\' && i + 1 < input.size())
+          std::vector<std::string> tokens;
+          std::string current;
+          bool in_single_quote = false, in_double_quote = false;
+          for (size_t i = 0; i < s.size(); ++i)
           {
-            current += input[i + 1];
-            ++i;
-          }
-          else if (std::isspace(c))
-          {
-            if (!current.empty())
+            char c = s[i];
+            if (in_single_quote)
             {
-              tokens.push_back(current);
-              current.clear();
+              if (c == '\'')
+                in_single_quote = false;
+              else
+                current += c;
+            }
+            else if (in_double_quote)
+            {
+              if (c == '"')
+                in_double_quote = false;
+              else if (c == '\\' && i + 1 < s.size() &&
+                       (s[i + 1] == '"' || s[i + 1] == '\\' || s[i + 1] == '$' || s[i + 1] == '\n'))
+              {
+                current += s[++i];
+              }
+              else
+                current += c;
+            }
+            else
+            {
+              if (c == '\'')
+                in_single_quote = true;
+              else if (c == '"')
+                in_double_quote = true;
+              else if (c == '\\' && i + 1 < s.size())
+              {
+                current += s[++i];
+              }
+              else if (std::isspace(c))
+              {
+                if (!current.empty())
+                {
+                  tokens.push_back(current);
+                  current.clear();
+                }
+              }
+              else
+                current += c;
             }
           }
-          else
-            current += c;
-        }
-      }
-      if (!current.empty())
-        tokens.push_back(current);
-      if (tokens.empty())
-        continue;
+          if (!current.empty())
+            tokens.push_back(current);
+          return tokens;
+        };
 
-      // Handle output redirection
-      int redirect_fd = -1;
-      std::string redirect_file;
-      bool append_mode = false;
-      bool append_stderr_mode = false;
-      for (size_t i = 0; i < tokens.size(); ++i)
-      {
-        if ((tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.size())
-        {
-          redirect_file = tokens[i + 1];
-          append_mode = false;
-          // Remove the redirection operator and filename from tokens
-          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
-          break;
-        }
-        else if ((tokens[i] == ">>" || tokens[i] == "1>>") && i + 1 < tokens.size())
-        {
-          redirect_file = tokens[i + 1];
-          append_mode = true;
-          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
-          break;
-        }
-      }
+        std::vector<std::string> left_tokens = tokenize(left_cmd);
+        std::vector<std::string> right_tokens = tokenize(right_cmd);
+        if (left_tokens.empty() || right_tokens.empty())
+          return 0;
 
-      // After handling > and 1> redirection, add:
-      std::string redirect_stderr_file;
-      for (size_t i = 0; i < tokens.size(); ++i)
-      {
-        if (tokens[i] == "2>" && i + 1 < tokens.size())
+        int pipefd[2];
+        if (pipe(pipefd) == -1)
         {
-          redirect_stderr_file = tokens[i + 1];
-          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
-          break;
+          std::cerr << "Failed to create pipe" << std::endl;
+          return 1;
         }
-        else if (tokens[i] == "2>>" && i + 1 < tokens.size())
-        {
-          redirect_stderr_file = tokens[i + 1];
-          append_stderr_mode = true;
-          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
-          break;
-        }
-      }
 
-      pid_t pid = fork();
-      if (pid == 0)
-      {
-        // Child process
-
-        // Build argv
-        std::vector<char *> argv;
-        for (size_t i = 0; i < tokens.size(); ++i)
+        pid_t pid1 = fork();
+        if (pid1 == 0)
         {
-          argv.push_back(const_cast<char *>(tokens[i].c_str()));
-        }
-        argv.push_back(nullptr);
-
-        // Find exec_path
-        std::string exec_path;
-        if (tokens[0].find('/') == std::string::npos)
-        {
-          char *path_env = std::getenv("PATH");
-          bool found = false;
-          if (path_env)
+          // Left child: stdout -> pipe write
+          dup2(pipefd[1], 1);
+          close(pipefd[0]);
+          close(pipefd[1]);
+          std::vector<char *> argv;
+          for (auto &t : left_tokens)
+            argv.push_back(const_cast<char *>(t.c_str()));
+          argv.push_back(nullptr);
+          std::string exec_path;
+          if (left_tokens[0].find('/') == std::string::npos)
           {
-            std::string path_var(path_env);
-            std::istringstream path_stream(path_var);
-            std::string dir;
-            while (std::getline(path_stream, dir, ':'))
+            char *path_env = std::getenv("PATH");
+            bool found = false;
+            if (path_env)
             {
-              std::string full_path = dir + "/" + tokens[0];
-              struct stat sb;
-              if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+              std::string path_var(path_env);
+              std::istringstream path_stream(path_var);
+              std::string dir;
+              while (std::getline(path_stream, dir, ':'))
               {
-                exec_path = full_path;
-                found = true;
-                break;
+                std::string full_path = dir + "/" + left_tokens[0];
+                struct stat sb;
+                if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+                {
+                  exec_path = full_path;
+                  found = true;
+                  break;
+                }
               }
             }
+            if (!found)
+            {
+              std::cerr << left_tokens[0] << ": command not found" << std::endl;
+              exit(1);
+            }
           }
-          if (!found)
+          else
           {
-            std::cerr << tokens[0] << ": command not found" << std::endl;
-            exit(1);
+            exec_path = left_tokens[0];
           }
-        }
-        else
-        {
-          exec_path = tokens[0];
+          execv(exec_path.c_str(), argv.data());
+          std::cerr << "Failed to execute " << exec_path << std::endl;
+          exit(1);
         }
 
-        if (!redirect_file.empty())
+        pid_t pid2 = fork();
+        if (pid2 == 0)
         {
-          int flags = O_WRONLY | O_CREAT | (append_mode ? O_APPEND : O_TRUNC);
-          int fd = open(redirect_file.c_str(), flags, 0644);
-          if (fd < 0)
+          // Right child: stdin <- pipe read
+          dup2(pipefd[0], 0);
+          close(pipefd[1]);
+          close(pipefd[0]);
+          std::vector<char *> argv;
+          for (auto &t : right_tokens)
+            argv.push_back(const_cast<char *>(t.c_str()));
+          argv.push_back(nullptr);
+          std::string exec_path;
+          if (right_tokens[0].find('/') == std::string::npos)
           {
-            std::cerr << "Failed to open file for redirection: " << redirect_file << std::endl;
-            exit(1);
+            char *path_env = std::getenv("PATH");
+            bool found = false;
+            if (path_env)
+            {
+              std::string path_var(path_env);
+              std::istringstream path_stream(path_var);
+              std::string dir;
+              while (std::getline(path_stream, dir, ':'))
+              {
+                std::string full_path = dir + "/" + right_tokens[0];
+                struct stat sb;
+                if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+                {
+                  exec_path = full_path;
+                  found = true;
+                  break;
+                }
+              }
+            }
+            if (!found)
+            {
+              std::cerr << right_tokens[0] << ": command not found" << std::endl;
+              exit(1);
+            }
           }
-          dup2(fd, 1); // Redirect stdout to file
-          close(fd);
-        }
-        if (!redirect_stderr_file.empty())
-        {
-          int flags = O_WRONLY | O_CREAT | (append_stderr_mode ? O_APPEND : O_TRUNC);
-          int fd_err = open(redirect_stderr_file.c_str(), flags, 0644);
-          if (fd_err < 0)
+          else
           {
-            std::cerr << "Failed to open file for stderr redirection: " << redirect_stderr_file << std::endl;
-            exit(1);
+            exec_path = right_tokens[0];
           }
-          dup2(fd_err, 2); // Redirect stderr to file
-          close(fd_err);
+          execv(exec_path.c_str(), argv.data());
+          std::cerr << "Failed to execute " << exec_path << std::endl;
+          exit(1);
         }
-        execv(exec_path.c_str(), argv.data());
-        // If execv fails
-        std::cerr << "Failed to execute " << exec_path << std::endl;
-        exit(1);
-      }
-      else if (pid > 0)
-      {
-        // Parent process
+
+        // Parent closes both ends and waits
+        close(pipefd[0]);
+        close(pipefd[1]);
         int status;
-        waitpid(pid, &status, 0);
+        waitpid(pid1, &status, 0);
+        waitpid(pid2, &status, 0);
       }
       else
       {
-        std::cerr << "Failed to fork" << std::endl;
+        // ...your existing code for single external command...
+        // Parse command and arguments into a vector
+        std::vector<std::string> tokens;
+        std::string current;
+        bool in_single_quote = false;
+        bool in_double_quote = false;
+        for (size_t i = 0; i < input.size(); ++i)
+        {
+          char c = input[i];
+          if (in_single_quote)
+          {
+            if (c == '\'')
+              in_single_quote = false;
+            else
+              current += c;
+          }
+          else if (in_double_quote)
+          {
+            if (c == '"')
+              in_double_quote = false;
+            else if (c == '\\' && i + 1 < input.size() &&
+                     (input[i + 1] == '"' || input[i + 1] == '\\' || input[i + 1] == '$' || input[i + 1] == '\n'))
+            {
+              current += input[i + 1];
+              ++i;
+            }
+            else
+              current += c;
+          }
+          else
+          {
+            if (c == '\'')
+              in_single_quote = true;
+            else if (c == '"')
+              in_double_quote = true;
+            else if (c == '\\' && i + 1 < input.size())
+            {
+              current += input[i + 1];
+              ++i;
+            }
+            else if (std::isspace(c))
+            {
+              if (!current.empty())
+              {
+                tokens.push_back(current);
+                current.clear();
+              }
+            }
+            else
+              current += c;
+          }
+        }
+        if (!current.empty())
+          tokens.push_back(current);
+        if (tokens.empty())
+          continue;
+
+        // Handle output redirection
+        int redirect_fd = -1;
+        std::string redirect_file;
+        bool append_mode = false;
+        bool append_stderr_mode = false;
+        for (size_t i = 0; i < tokens.size(); ++i)
+        {
+          if ((tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.size())
+          {
+            redirect_file = tokens[i + 1];
+            append_mode = false;
+            // Remove the redirection operator and filename from tokens
+            tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+            break;
+          }
+          else if ((tokens[i] == ">>" || tokens[i] == "1>>") && i + 1 < tokens.size())
+          {
+            redirect_file = tokens[i + 1];
+            append_mode = true;
+            tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+            break;
+          }
+        }
+
+        // After handling > and 1> redirection, add:
+        std::string redirect_stderr_file;
+        for (size_t i = 0; i < tokens.size(); ++i)
+        {
+          if (tokens[i] == "2>" && i + 1 < tokens.size())
+          {
+            redirect_stderr_file = tokens[i + 1];
+            tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+            break;
+          }
+          else if (tokens[i] == "2>>" && i + 1 < tokens.size())
+          {
+            redirect_stderr_file = tokens[i + 1];
+            append_stderr_mode = true;
+            tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+            break;
+          }
+        }
+
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+          // Child process
+
+          // Build argv
+          std::vector<char *> argv;
+          for (size_t i = 0; i < tokens.size(); ++i)
+          {
+            argv.push_back(const_cast<char *>(tokens[i].c_str()));
+          }
+          argv.push_back(nullptr);
+
+          // Find exec_path
+          std::string exec_path;
+          if (tokens[0].find('/') == std::string::npos)
+          {
+            char *path_env = std::getenv("PATH");
+            bool found = false;
+            if (path_env)
+            {
+              std::string path_var(path_env);
+              std::istringstream path_stream(path_var);
+              std::string dir;
+              while (std::getline(path_stream, dir, ':'))
+              {
+                std::string full_path = dir + "/" + tokens[0];
+                struct stat sb;
+                if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+                {
+                  exec_path = full_path;
+                  found = true;
+                  break;
+                }
+              }
+            }
+            if (!found)
+            {
+              std::cerr << tokens[0] << ": command not found" << std::endl;
+              exit(1);
+            }
+          }
+          else
+          {
+            exec_path = tokens[0];
+          }
+
+          if (!redirect_file.empty())
+          {
+            int flags = O_WRONLY | O_CREAT | (append_mode ? O_APPEND : O_TRUNC);
+            int fd = open(redirect_file.c_str(), flags, 0644);
+            if (fd < 0)
+            {
+              std::cerr << "Failed to open file for redirection: " << redirect_file << std::endl;
+              exit(1);
+            }
+            dup2(fd, 1); // Redirect stdout to file
+            close(fd);
+          }
+          if (!redirect_stderr_file.empty())
+          {
+            int flags = O_WRONLY | O_CREAT | (append_stderr_mode ? O_APPEND : O_TRUNC);
+            int fd_err = open(redirect_stderr_file.c_str(), flags, 0644);
+            if (fd_err < 0)
+            {
+              std::cerr << "Failed to open file for stderr redirection: " << redirect_stderr_file << std::endl;
+              exit(1);
+            }
+            dup2(fd_err, 2); // Redirect stderr to file
+            close(fd_err);
+          }
+          execv(exec_path.c_str(), argv.data());
+          // If execv fails
+          std::cerr << "Failed to execute " << exec_path << std::endl;
+          exit(1);
+        }
+        else if (pid > 0)
+        {
+          // Parent process
+          int status;
+          waitpid(pid, &status, 0);
+        }
+        else
+        {
+          std::cerr << "Failed to fork" << std::endl;
+        }
       }
     }
-    // (Removed unreachable/duplicate else block that caused syntax errors)
   }
   return 0;
 }
