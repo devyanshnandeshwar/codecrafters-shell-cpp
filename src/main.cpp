@@ -152,6 +152,8 @@ int main()
 
   rl_attempted_completion_function = command_completion;
 
+  int last_appended_history = 0;
+
   while (true)
   {
     char *input_c = readline("$ ");
@@ -619,14 +621,35 @@ int main()
         iss >> arg1 >> arg2;
         if (arg1 == "-r" && !arg2.empty())
         {
-          // Read history from file and append to current history
           read_history(arg2.c_str());
           continue;
         }
         if (arg1 == "-w" && !arg2.empty())
         {
-          // Write current history to file (create or overwrite)
           write_history(arg2.c_str());
+          last_appended_history = history_length;
+          continue;
+        }
+        if (arg1 == "-a" && !arg2.empty())
+        {
+          // Append new history entries to file
+          HIST_ENTRY **hist_list = history_list();
+          if (hist_list)
+          {
+            FILE *f = fopen(arg2.c_str(), "a");
+            if (f)
+            {
+              int total = 0;
+              while (hist_list[total])
+                ++total;
+              for (int i = last_appended_history; i < total; ++i)
+              {
+                fprintf(f, "%s\n", hist_list[i]->line);
+              }
+              fclose(f);
+              last_appended_history = total;
+            }
+          }
           continue;
         }
 
