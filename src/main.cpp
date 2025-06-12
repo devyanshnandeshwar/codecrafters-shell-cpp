@@ -85,6 +85,12 @@ int main()
           {
             in_double_quote = true;
           }
+          else if (c == '\\' && i + 1 < input.size())
+          {
+            // Non-quoted backslash escapes the next character
+            current += input[i + 1];
+            ++i;
+          }
           else if (std::isspace(c))
           {
             if (!current.empty())
@@ -198,6 +204,12 @@ int main()
           else if (c == '"')
           {
             in_double_quote = true;
+          }
+          else if (c == '\\' && i + 1 < input.size())
+          {
+            // Non-quoted backslash escapes the next character
+            current += input[i + 1];
+            ++i;
           }
           else if (std::isspace(c))
           {
