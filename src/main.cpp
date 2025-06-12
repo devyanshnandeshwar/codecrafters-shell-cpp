@@ -209,11 +209,14 @@ int main()
       }
 
       // Print the rest joined by spaces
-      for (size_t i = 0; i < tokens.size(); ++i)
+      if (!tokens.empty())
       {
-        if (i > 0)
-          std::cout << " ";
-        std::cout << tokens[i];
+        for (size_t i = 0; i < tokens.size(); ++i)
+        {
+          if (i > 0)
+            std::cout << " ";
+          std::cout << tokens[i];
+        }
       }
       std::cout << std::endl;
 
