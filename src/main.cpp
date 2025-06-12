@@ -879,9 +879,6 @@ int main()
   }
 
   // --- Save history to HISTFILE on exit ---
-  if (histfile && histfile[0] != '\0')
-  {
-    write_history(histfile);
-  }
+
   return 0;
 }
