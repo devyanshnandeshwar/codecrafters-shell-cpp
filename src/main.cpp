@@ -166,11 +166,22 @@ int main()
     size_t pipe_pos = input.find('|');
     if (pipe_pos != std::string::npos)
     {
-      // Split input into left and right of '|'
-      std::string left_cmd = input.substr(0, pipe_pos);
-      std::string right_cmd = input.substr(pipe_pos + 1);
+      // --- Split input into pipeline stages ---
+      std::vector<std::string> stages;
+      size_t start = 0;
+      while (true)
+      {
+        size_t pos = input.find('|', start);
+        if (pos == std::string::npos)
+        {
+          stages.push_back(input.substr(start));
+          break;
+        }
+        stages.push_back(input.substr(start, pos - start));
+        start = pos + 1;
+      }
 
-      // Trim whitespace
+      // --- Tokenize each stage ---
       auto trim = [](std::string &s)
       {
         size_t start = s.find_first_not_of(" \t");
@@ -182,10 +193,6 @@ int main()
         }
         s = s.substr(start, end - start + 1);
       };
-      trim(left_cmd);
-      trim(right_cmd);
-
-      // Tokenize
       auto tokenize = [](const std::string &s)
       {
         std::vector<std::string> tokens;
@@ -240,215 +247,157 @@ int main()
         return tokens;
       };
 
-      std::vector<std::string> left_tokens = tokenize(left_cmd);
-      std::vector<std::string> right_tokens = tokenize(right_cmd);
-      if (left_tokens.empty() || right_tokens.empty())
-        return 0;
-
-      int pipefd[2];
-      if (pipe(pipefd) == -1)
+      std::vector<std::vector<std::string>> pipeline_tokens;
+      for (auto &stage : stages)
       {
-        std::cerr << "Failed to create pipe" << std::endl;
-        return 1;
+        trim(stage);
+        pipeline_tokens.push_back(tokenize(stage));
       }
 
-      // --- LEFT SIDE ---
-      pid_t pid1 = fork();
-      if (pid1 == 0)
+      int n = pipeline_tokens.size();
+      std::vector<int> pfd(2 * (n - 1)); // pipes: [read, write, read, write, ...]
+      for (int i = 0; i < n - 1; ++i)
       {
-        // Child: left side of pipeline
-        dup2(pipefd[1], 1); // stdout -> pipe write
-        close(pipefd[0]);
-        close(pipefd[1]);
-
-        // Built-in: echo or type
-        if (left_tokens[0] == "echo")
+        if (pipe(&pfd[2 * i]) == -1)
         {
-          // Print arguments joined by space, then newline
-          for (size_t i = 1; i < left_tokens.size(); ++i)
-          {
-            if (i > 1)
-              std::cout << " ";
-            std::cout << left_tokens[i];
-          }
-          std::cout << std::endl;
-          exit(0);
+          std::cerr << "Failed to create pipe" << std::endl;
+          return 1;
         }
-        else if (left_tokens[0] == "type")
+      }
+
+      std::vector<pid_t> pids;
+      for (int i = 0; i < n; ++i)
+      {
+        pid_t pid = fork();
+        if (pid == 0)
         {
-          if (left_tokens.size() < 2)
-            std::cout << "type: missing argument" << std::endl;
-          else if (left_tokens[1] == "echo" || left_tokens[1] == "exit" || left_tokens[1] == "type")
-            std::cout << left_tokens[1] << " is a shell builtin" << std::endl;
-          else
+          // Set up stdin
+          if (i > 0)
           {
-            char *path_env = std::getenv("PATH");
-            bool found = false;
-            if (path_env)
+            dup2(pfd[2 * (i - 1)], 0);
+          }
+          // Set up stdout
+          if (i < n - 1)
+          {
+            dup2(pfd[2 * i + 1], 1);
+          }
+          // Close all pipe fds in child
+          for (int j = 0; j < 2 * (n - 1); ++j)
+            close(pfd[j]);
+
+          // --- Built-in handling ---
+          auto &tokens = pipeline_tokens[i];
+          if (!tokens.empty() && tokens[0] == "echo")
+          {
+            for (size_t k = 1; k < tokens.size(); ++k)
             {
-              std::string path_var(path_env);
-              std::istringstream path_stream(path_var);
-              std::string dir;
-              while (std::getline(path_stream, dir, ':'))
+              if (k > 1)
+                std::cout << " ";
+              std::cout << tokens[k];
+            }
+            std::cout << std::endl;
+            exit(0);
+          }
+          else if (!tokens.empty() && tokens[0] == "type")
+          {
+            if (tokens.size() < 2)
+              std::cout << "type: missing argument" << std::endl;
+            else if (tokens[1] == "echo" || tokens[1] == "exit" || tokens[1] == "type")
+              std::cout << tokens[1] << " is a shell builtin" << std::endl;
+            else
+            {
+              char *path_env = std::getenv("PATH");
+              bool found = false;
+              if (path_env)
               {
-                std::string full_path = dir + "/" + left_tokens[1];
-                struct stat sb;
-                if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+                std::string path_var(path_env);
+                std::istringstream path_stream(path_var);
+                std::string dir;
+                while (std::getline(path_stream, dir, ':'))
                 {
-                  std::cout << left_tokens[1] << " is " << full_path << std::endl;
-                  found = true;
-                  break;
+                  std::string full_path = dir + "/" + tokens[1];
+                  struct stat sb;
+                  if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+                  {
+                    std::cout << tokens[1] << " is " << full_path << std::endl;
+                    found = true;
+                    break;
+                  }
                 }
               }
+              if (!found)
+                std::cout << tokens[1] << ": not found" << std::endl;
             }
-            if (!found)
-              std::cout << left_tokens[1] << ": not found" << std::endl;
+            exit(0);
+          }
+          // --- External command ---
+          if (!tokens.empty())
+          {
+            std::vector<char *> argv;
+            for (auto &t : tokens)
+              argv.push_back(const_cast<char *>(t.c_str()));
+            argv.push_back(nullptr);
+            std::string exec_path;
+            if (tokens[0].find('/') == std::string::npos)
+            {
+              char *path_env = std::getenv("PATH");
+              bool found = false;
+              if (path_env)
+              {
+                std::string path_var(path_env);
+                std::istringstream path_stream(path_var);
+                std::string dir;
+                while (std::getline(path_stream, dir, ':'))
+                {
+                  std::string full_path = dir + "/" + tokens[0];
+                  struct stat sb;
+                  if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
+                  {
+                    exec_path = full_path;
+                    found = true;
+                    break;
+                  }
+                }
+              }
+              if (!found)
+              {
+                std::cerr << tokens[0] << ": command not found" << std::endl;
+                exit(1);
+              }
+            }
+            else
+            {
+              exec_path = tokens[0];
+            }
+            execv(exec_path.c_str(), argv.data());
+            std::cerr << "Failed to execute " << exec_path << std::endl;
+            exit(1);
           }
           exit(0);
         }
-        // External command
-        std::vector<char *> argv;
-        for (auto &t : left_tokens)
-          argv.push_back(const_cast<char *>(t.c_str()));
-        argv.push_back(nullptr);
-        std::string exec_path;
-        if (left_tokens[0].find('/') == std::string::npos)
+        else if (pid > 0)
         {
-          char *path_env = std::getenv("PATH");
-          bool found = false;
-          if (path_env)
-          {
-            std::string path_var(path_env);
-            std::istringstream path_stream(path_var);
-            std::string dir;
-            while (std::getline(path_stream, dir, ':'))
-            {
-              std::string full_path = dir + "/" + left_tokens[0];
-              struct stat sb;
-              if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
-              {
-                exec_path = full_path;
-                found = true;
-                break;
-              }
-            }
-          }
-          if (!found)
-          {
-            std::cerr << left_tokens[0] << ": command not found" << std::endl;
-            exit(1);
-          }
+          pids.push_back(pid);
         }
         else
         {
-          exec_path = left_tokens[0];
+          std::cerr << "Failed to fork" << std::endl;
+          // Close all pipes
+          for (int j = 0; j < 2 * (n - 1); ++j)
+            close(pfd[j]);
+          return 1;
         }
-        execv(exec_path.c_str(), argv.data());
-        std::cerr << "Failed to execute " << exec_path << std::endl;
-        exit(1);
       }
-
-      // --- RIGHT SIDE ---
-      pid_t pid2 = fork();
-      if (pid2 == 0)
+      // Parent closes all pipe fds
+      for (int j = 0; j < 2 * (n - 1); ++j)
+        close(pfd[j]);
+      // Wait for all children
+      for (pid_t pid : pids)
       {
-        // Child: right side of pipeline
-        dup2(pipefd[0], 0); // stdin <- pipe read
-        close(pipefd[1]);
-        close(pipefd[0]);
-
-        // Built-in: echo or type
-        if (right_tokens[0] == "echo")
-        {
-          for (size_t i = 1; i < right_tokens.size(); ++i)
-          {
-            if (i > 1)
-              std::cout << " ";
-            std::cout << right_tokens[i];
-          }
-          std::cout << std::endl;
-          exit(0);
-        }
-        else if (right_tokens[0] == "type")
-        {
-          if (right_tokens.size() < 2)
-            std::cout << "type: missing argument" << std::endl;
-          else if (right_tokens[1] == "echo" || right_tokens[1] == "exit" || right_tokens[1] == "type")
-            std::cout << right_tokens[1] << " is a shell builtin" << std::endl;
-          else
-          {
-            char *path_env = std::getenv("PATH");
-            bool found = false;
-            if (path_env)
-            {
-              std::string path_var(path_env);
-              std::istringstream path_stream(path_var);
-              std::string dir;
-              while (std::getline(path_stream, dir, ':'))
-              {
-                std::string full_path = dir + "/" + right_tokens[1];
-                struct stat sb;
-                if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
-                {
-                  std::cout << right_tokens[1] << " is " << full_path << std::endl;
-                  found = true;
-                  break;
-                }
-              }
-            }
-            if (!found)
-              std::cout << right_tokens[1] << ": not found" << std::endl;
-          }
-          exit(0);
-        }
-        // External command
-        std::vector<char *> argv;
-        for (auto &t : right_tokens)
-          argv.push_back(const_cast<char *>(t.c_str()));
-        argv.push_back(nullptr);
-        std::string exec_path;
-        if (right_tokens[0].find('/') == std::string::npos)
-        {
-          char *path_env = std::getenv("PATH");
-          bool found = false;
-          if (path_env)
-          {
-            std::string path_var(path_env);
-            std::istringstream path_stream(path_var);
-            std::string dir;
-            while (std::getline(path_stream, dir, ':'))
-            {
-              std::string full_path = dir + "/" + right_tokens[0];
-              struct stat sb;
-              if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR)
-              {
-                exec_path = full_path;
-                found = true;
-                break;
-              }
-            }
-          }
-          if (!found)
-          {
-            std::cerr << right_tokens[0] << ": command not found" << std::endl;
-            exit(1);
-          }
-        }
-        else
-        {
-          exec_path = right_tokens[0];
-        }
-        execv(exec_path.c_str(), argv.data());
-        std::cerr << "Failed to execute " << exec_path << std::endl;
-        exit(1);
+        int status;
+        waitpid(pid, &status, 0);
       }
-
-      // Parent closes both ends and waits
-      close(pipefd[0]);
-      close(pipefd[1]);
-      int status;
-      waitpid(pid1, &status, 0);
-      waitpid(pid2, &status, 0);
+      continue;
     }
     else
     {
