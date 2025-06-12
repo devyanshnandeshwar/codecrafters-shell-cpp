@@ -565,6 +565,7 @@ int main()
         std::cerr << "Failed to fork" << std::endl;
       }
     }
+    // (Removed unreachable/duplicate else block that caused syntax errors)
   }
   return 0;
 }
