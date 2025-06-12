@@ -94,8 +94,7 @@ char *external_command_generator(const char *text, int state)
   }
   if (match_index < matches.size())
   {
-    // Add a space after completion
-    std::string result = matches[match_index++] + " ";
+    std::string result = matches[match_index++];
     return strdup(result.c_str());
   }
   return nullptr;
