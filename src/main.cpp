@@ -1,5 +1,7 @@
 #include <fcntl.h>
 #include <iostream>
+#include <readline/history.h>
+#include <readline/readline.h>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
@@ -7,18 +9,55 @@
 #include <unistd.h>
 #include <vector>
 
+char *builtin_generator(const char *text, int state)
+{
+  static const char *builtins[] = {"echo", "exit", nullptr};
+  static int list_index, len;
+  if (!state)
+  {
+    list_index = 0;
+    len = strlen(text);
+  }
+  const char *name;
+  while ((name = builtins[list_index++]))
+  {
+    if (strncmp(name, text, len) == 0)
+    {
+      // Allocate a new string for readline to use
+      char *completion = (char *)malloc(strlen(name) + 2);
+      strcpy(completion, name);
+      strcat(completion, " "); // Add a space after completion
+      return completion;
+    }
+  }
+  return nullptr;
+}
+
+char **builtin_completion(const char *text, int start, int end)
+{
+  rl_attempted_completion_over = 1;
+  return rl_completion_matches(text, builtin_generator);
+}
+
 int main()
 {
   // Flush after every std::cout / std:cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
 
+  rl_attempted_completion_function = builtin_completion;
+
   while (true)
   {
-    std::cout << "$ ";
+    char *input_c = readline("$ ");
+    if (!input_c)
+      break; // EOF or error
 
-    std::string input;
-    std::getline(std::cin, input);
+    std::string input(input_c);
+    free(input_c); // Free the memory allocated by readline
+
+    // Add the command to history
+    add_history(input_c);
 
     // parsing command and argument
     std::istringstream iss(input);
