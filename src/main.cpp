@@ -621,12 +621,17 @@ int main()
         {
           // Read history from file and append to current history
           read_history(arg2.c_str());
-          // Do not print anything, just return
+          continue;
+        }
+        if (arg1 == "-w" && !arg2.empty())
+        {
+          // Write current history to file (create or overwrite)
+          write_history(arg2.c_str());
           continue;
         }
 
         int n = -1;
-        if (!arg1.empty() && arg1 != "-r")
+        if (!arg1.empty() && arg1 != "-r" && arg1 != "-w")
         {
           try
           {
