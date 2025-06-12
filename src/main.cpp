@@ -698,6 +698,21 @@ int main()
         else
           std::cerr << "pwd: error retrieving current directory" << std::endl;
       }
+      else if (cmd == "cd")
+      {
+        std::string path;
+        iss >> path;
+        if (path.empty())
+        {
+          // Do nothing or optionally set to HOME in later stages
+          continue;
+        }
+        if (chdir(path.c_str()) != 0)
+        {
+          std::cerr << "cd: " << path << ": No such file or directory" << std::endl;
+        }
+        // On success, do nothing (as required)
+      }
       else
       {
         // Parse command and arguments into a vector
