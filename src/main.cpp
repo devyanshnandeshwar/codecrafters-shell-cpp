@@ -35,6 +35,9 @@ char *builtin_generator(const char *text, int state)
 
 char **builtin_completion(const char *text, int start, int end)
 {
+  // Only complete at the start of the line (first word)
+  if (start != 0)
+    return nullptr;
   rl_attempted_completion_over = 1;
   return rl_completion_matches(text, builtin_generator);
 }
