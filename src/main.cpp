@@ -615,10 +615,18 @@ int main()
       }
       else if (cmd == "history")
       {
+        int n = -1;
+        iss >> n; // Try to read an integer argument
         HIST_ENTRY **hist_list = history_list();
         if (hist_list)
         {
-          for (int i = 0; hist_list[i]; ++i)
+          int total = 0;
+          while (hist_list[total])
+            ++total;
+          int start = 0;
+          if (n > 0 && n < total)
+            start = total - n;
+          for (int i = start; i < total; ++i)
           {
             std::cout << "    " << (i + 1) << "  " << hist_list[i]->line << std::endl;
           }
