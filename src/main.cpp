@@ -8,6 +8,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
+#include <dirent.h>
+#include <algorithm>
 
 char *builtin_generator(const char *text, int state)
 {
@@ -49,13 +51,107 @@ char **builtin_completion(const char *text, int start, int end)
   return matches;
 }
 
+char *external_command_generator(const char *text, int state)
+{
+  static std::vector<std::string> matches;
+  static size_t match_index;
+  if (!state)
+  {
+    matches.clear();
+    match_index = 0;
+    // Get PATH
+    const char *path_env = getenv("PATH");
+    if (!path_env)
+      return nullptr;
+    std::string path_var(path_env);
+    std::istringstream path_stream(path_var);
+    std::string dir;
+    size_t len = strlen(text);
+    while (std::getline(path_stream, dir, ':'))
+    {
+      DIR *dp = opendir(dir.c_str());
+      if (!dp)
+        continue;
+      struct dirent *entry;
+      while ((entry = readdir(dp)))
+      {
+        std::string name(entry->d_name);
+        if (name.compare(0, len, text) == 0)
+        {
+          std::string full_path = dir + "/" + name;
+          struct stat sb;
+          if (stat(full_path.c_str(), &sb) == 0 && sb.st_mode & S_IXUSR && !(sb.st_mode & S_IFDIR))
+          {
+            matches.push_back(name);
+          }
+        }
+      }
+      closedir(dp);
+    }
+    // Remove duplicates
+    std::sort(matches.begin(), matches.end());
+    matches.erase(std::unique(matches.begin(), matches.end()), matches.end());
+  }
+  if (match_index < matches.size())
+  {
+    // Add a space after completion
+    std::string result = matches[match_index++] + " ";
+    return strdup(result.c_str());
+  }
+  return nullptr;
+}
+
+char **command_completion(const char *text, int start, int end)
+{
+  if (start != 0)
+    return nullptr;
+  rl_attempted_completion_over = 1;
+
+  // Try builtins first
+  char **builtin_matches = rl_completion_matches(text, builtin_generator);
+  bool has_builtin = (builtin_matches && builtin_matches[0]);
+
+  // Try external commands
+  char **external_matches = rl_completion_matches(text, external_command_generator);
+  bool has_external = (external_matches && external_matches[0]);
+
+  // If neither, ring bell
+  if (!has_builtin && !has_external)
+  {
+    std::cout << "\a" << std::flush;
+    return nullptr;
+  }
+
+  // Merge both sets of matches
+  std::vector<char *> all_matches;
+  if (has_builtin)
+  {
+    for (int i = 0; builtin_matches[i]; ++i)
+      all_matches.push_back(builtin_matches[i]);
+    free(builtin_matches);
+  }
+  if (has_external)
+  {
+    for (int i = 0; external_matches[i]; ++i)
+      all_matches.push_back(external_matches[i]);
+    free(external_matches);
+  }
+  all_matches.push_back(nullptr);
+
+  // Copy to char** for readline
+  char **result = (char **)malloc(sizeof(char *) * all_matches.size());
+  for (size_t i = 0; i < all_matches.size(); ++i)
+    result[i] = all_matches[i];
+  return result;
+}
+
 int main()
 {
   // Flush after every std::cout / std:cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
 
-  rl_attempted_completion_function = builtin_completion;
+  rl_attempted_completion_function = command_completion;
 
   while (true)
   {
