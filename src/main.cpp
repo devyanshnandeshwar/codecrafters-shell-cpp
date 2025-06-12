@@ -52,20 +52,14 @@ int main()
         if (in_single_quote)
         {
           if (c == '\'')
-          {
             in_single_quote = false;
-          }
           else
-          {
             current += c;
-          }
         }
         else if (in_double_quote)
         {
           if (c == '"')
-          {
             in_double_quote = false;
-          }
           else if (c == '\\' && i + 1 < input.size() &&
                    (input[i + 1] == '"' || input[i + 1] == '\\' || input[i + 1] == '$' || input[i + 1] == '\n'))
           {
@@ -73,23 +67,16 @@ int main()
             ++i;
           }
           else
-          {
             current += c;
-          }
         }
         else
         {
           if (c == '\'')
-          {
             in_single_quote = true;
-          }
           else if (c == '"')
-          {
             in_double_quote = true;
-          }
           else if (c == '\\' && i + 1 < input.size())
           {
-            // Non-quoted backslash escapes the next character
             current += input[i + 1];
             ++i;
           }
@@ -102,15 +89,38 @@ int main()
             }
           }
           else
-          {
             current += c;
-          }
         }
       }
       if (!current.empty())
-      {
         tokens.push_back(current);
+
+      // Handle output redirection for echo
+      std::string redirect_file;
+      for (size_t i = 0; i < tokens.size(); ++i)
+      {
+        if ((tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.size())
+        {
+          redirect_file = tokens[i + 1];
+          tokens.erase(tokens.begin() + i, tokens.begin() + i + 2);
+          break;
+        }
       }
+
+      int saved_stdout = -1;
+      int fd = -1;
+      if (!redirect_file.empty())
+      {
+        fd = open(redirect_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0)
+        {
+          std::cerr << "Failed to open file for redirection: " << redirect_file << std::endl;
+          return 1;
+        }
+        saved_stdout = dup(1);
+        dup2(fd, 1);
+      }
+
       // Print the rest joined by spaces
       for (size_t i = 0; i < tokens.size(); ++i)
       {
@@ -119,6 +129,14 @@ int main()
         std::cout << tokens[i];
       }
       std::cout << std::endl;
+
+      if (fd != -1)
+      {
+        fflush(stdout);
+        dup2(saved_stdout, 1);
+        close(fd);
+        close(saved_stdout);
+      }
     }
     else if (cmd == "type")
     {
