@@ -12,7 +12,7 @@
 #include <algorithm>
 
 // List of shell builtins for completion and type
-const std::vector<std::string> builtins = {"echo", "exit", "history", "pwd", "cd"};
+const std::vector<std::string> builtins = {"echo", "exit", "history", "pwd", "cd", "type"};
 
 // Helper: Check if a command is a shell builtin
 bool is_builtin(const std::string &cmd)
